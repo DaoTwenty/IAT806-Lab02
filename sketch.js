@@ -5,8 +5,6 @@ let speedY = 1;
 let size = 100;
 let sizeIncrement = 1;
 let radius = size / 2;
-let rightColor = "blue";
-let leftColor = "red";
 let ballColor;
 // indicates force on or off
 let force = false;
@@ -17,12 +15,16 @@ let radial_force;
 let force_angle;
 let speed_magnitude;
 let max_speed = 25;
-let force_multiplier = 25;
+let force_multiplier = 1000;
 let earth_radius = 150;
 let earth_image;
 let moon_image;
 let circle_mask_moon;
 let circle_mask_earth;
+let trailing_pos = [];
+let num_trailing = 100;
+let trail_start_color;
+let trail_end_color;
 
 async function setup() {
   createCanvas(800, 600);
@@ -37,55 +39,55 @@ async function setup() {
   circle_mask_earth.circle(earth_radius/2, earth_radius/2, 120);
   earth_image.resize(earth_radius, earth_radius);
   earth_image.mask(circle_mask_earth);
+  trail_start_color = color(45, 30, 99, 150);
+  trail_end_color = color(100, 40, 20, 0);
   imageMode(CENTER);
 }
 
 function draw() {
   background("#000000");
 
-  // left half is one color, right half is the other
-  /*
-  if (circleX > width / 2) {
-    ballColor = rightColor;
-  } else {
-    ballColor = leftColor;
-  }
-  */
-
+  // If force is activated (when the mouse is pressed)
   if (force) {
     console.log("force on")
-    radial_force = force_multiplier /sqrt((circleX - mouseX)**2 + (circleY - mouseY)**2);
-    speedX -= (circleX - mouseX) * radial_force / sqrt((circleX - mouseX)**2 + (circleY - mouseY)**2);
-    speedY -= (circleY - mouseY) * radial_force / sqrt((circleX - mouseX)**2 + (circleY - mouseY)**2);
+    //force of gravity proporitional to -1/r^2
+    let diff_magn = sqrt((circleX - mouseX)**2 + (circleY - mouseY)**2);
+    radial_force = force_multiplier / diff_magn;
+    // trigonometry to project on x and y axis
+    // dv = a * dt (with dt = 1 frame) and a = force
+    speedX -= (circleX - mouseX) / diff_magn * radial_force / diff_magn;
+    speedY -= (circleY - mouseY) / diff_magn * radial_force / diff_magn;
+    // variating gradient gloz
+    let r = earth_radius * (1 + 0.2 * sin(frameCount / 2));
+    noStroke();
+    // create gradient
+    let myGradient = drawingContext.createRadialGradient(mouseX, mouseY, earth_radius / 2, mouseX, mouseY, r);
+    myGradient.addColorStop(0, "#3760be");
+    myGradient.addColorStop(0.2, "#4c2abd");
+    myGradient.addColorStop(0.5, "#2b2046");
+    myGradient.addColorStop(1, "#000000");
+    drawingContext.fillStyle = myGradient;
+
+    //draw gradient
+    circle(mouseX, mouseY, r * 2);
+
+    //create a line in direction of force
     stroke("#ffffff");
     line(
         circleX, 
         circleY, 
-        circleX - 200 * (circleX - mouseX)/ sqrt((circleX - mouseX)**2 + (circleY - mouseY)**2), 
-        circleY - 200 * (circleY - mouseY) / sqrt((circleX - mouseX)**2 + (circleY - mouseY)**2)
+        circleX - (circleX - mouseX) / diff_magn * 100, 
+        circleY - (circleY - mouseY) / diff_magn * 100
     )
-    let r = earth_radius * (1 + 0.2 * sin(frameCount / 30));
-    noStroke();
-    
-    let myGradient = drawingContext.createRadialGradient(mouseX, mouseY, earth_radius / 2, mouseX, mouseY, r);
-    myGradient.addColorStop(0, "#3760be");
-    myGradient.addColorStop(0.4, "#4c2abd");
-    myGradient.addColorStop(0.8, "#2b2046");
-    myGradient.addColorStop(1, "#000000");
-    drawingContext.fillStyle = myGradient;
-    //drawingContext.strokeStyle = 'rgba(210, 202, 202, 0)';
-
-    //stroke("#ffffff");
-    circle(mouseX, mouseY, r * 2);
   }
+  //draw image
   image(earth_image, mouseX, mouseY);
+  // clip speed
   speed_magnitude = sqrt(speedX**2 + speedY**2);
   if (speed_magnitude > max_speed) {
-    speedX = max_speed;
-    speedY = max_speed;
+    speedX *= max_speed/speed_magnitude;
+    speedY *= max_speed/speed_magnitude;
   }
-  //noFill();
-  //fill(ballColor);
 
   // move
   circleX = circleX + speedX;
@@ -108,13 +110,11 @@ function draw() {
   }
   radius = size / 2;
 
-  // bounce off the left and right walls, and flip growing/shrinking
-  /*
-  if (circleX >= width - radius || circleX < radius) {
-    speedX = speedX * -1;
-    sizeIncrement = sizeIncrement * -1;
-  }
-  */
+  // changed bounce formula because if the ball goes far enough
+  // that reversing it doesnt put it back in boundaries in one loop,
+  // then it reverses a second consecutive time, and this becomes
+  // an infinite loop. This new formula keeps it in the right direction
+  // as long as it's out of boundaries
   if (circleX >= width - radius) {
     speedX = - abs(speedX);
     circleX = width - radius;
@@ -125,25 +125,30 @@ function draw() {
     circleX = radius;
     sizeIncrement = sizeIncrement * -1;
   }
-
   if (circleY >= height - radius) {
-    speedY = - abs(speedY)
+    speedY = - abs(speedY);
+    circleY = height - radius;
   }
   if (circleY < radius) {
-    speedY = abs(speedY)
+    speedY = abs(speedY);
+    circleY = radius;
   }
 
-  // bounce off the top and bottom walls
-  /*
-  if (circleY >= height - radius || circleY < radius) {
-    speedY = speedY * -1;
+  // update list of past position for trailing mark
+  trailing_pos.push({x: circleX, y: circleY});
+  if (trailing_pos.length > num_trailing) {
+    trailing_pos = trailing_pos.slice(trailing_pos.length - num_trailing);
   }
-  */
-
-  //let circle_shape = circle(circleX, circleY, size);
-  //circleMask.circle(circleX, circleY, size);
-  //moon_image.resize(size, size)
-  //moon_image.mask(circleMask);
+  // draw trail with fading circle
+  for (let i=0; i<trailing_pos.length; i++) {
+    let pos = trailing_pos[i];
+    let t = i / (trailing_pos.length - 1);
+    let trail_color = lerpColor(trail_start_color, trail_end_color, 1 - t);
+    fill(trail_color);
+    noStroke();
+    circle(pos.x, pos.y, size * t);
+  }
+  //draw the moon
   image(moon_image, circleX, circleY);
 }
 
